@@ -60,15 +60,17 @@ class StrategyInput(BaseModel):
     class Config:
         json_schema_extra = {
             "example": {
-                "sector": "investment",
+                "sector": "credit_card",
                 "parameters": {
-                    "investment_amount": 100000,
-                    "risk_tolerance": 7,
-                    "investment_horizon": 5,
-                    "current_portfolio_value": 500000
+                    "credit_score": 750,
+                    "annual_income": 75000,
+                    "monthly_spending": 3000,
+                    "preferred_rewards": "travel",  # Options: travel, cashback, points, business
+                    "card_type": "rewards"  # Options: rewards, business, secured, student
                 }
             }
         }
+
     
 
 class MoreInfoInput(BaseModel):
@@ -161,32 +163,44 @@ async def generate_strategies(input_data: StrategyInput):
 @app.get("/view_pdf_page")
 async def view_pdf_page(path: str, page: int = 1):
     try:
-        pdf_filename = path.split(':')[0].strip()
-        pdf_filename = pdf_filename.replace(' ', '_') + '.pdf' if not pdf_filename.endswith('.pdf') else pdf_filename
-
+        # Extract both filename and page reference from path
+        parts = path.split(':')
+        pdf_filename = parts[0].strip()
+        
+        # Handle UUID prefix in filename
         pdf_files = [f for f in os.listdir(self_rag.pdf_dir) if f.lower().endswith('.pdf')]
         target_pdf = next((pdf for pdf in pdf_files if pdf_filename.lower() in pdf.lower()), None)
-
+        
+        if not target_pdf:
+            # Search by UUID if direct filename match fails
+            target_pdf = next((pdf for pdf in pdf_files if pdf.startswith(pdf_filename)), None)
+            
         if not target_pdf:
             raise HTTPException(status_code=404, detail=f"PDF file not found: {pdf_filename}")
 
-        pdf_path = os.path.join(self_rag.pdf_dir, target_pdf)
+        # Ensure static directory exists
         static_pdf_dir = os.path.join("static", "pdfs")
         os.makedirs(static_pdf_dir, exist_ok=True)
-
+        
+        # Copy file to static directory with original name preserved
+        source_path = os.path.join(self_rag.pdf_dir, target_pdf)
         static_pdf_path = os.path.join(static_pdf_dir, target_pdf)
-        shutil.copy2(pdf_path, static_pdf_path)
-
+        shutil.copy2(source_path, static_pdf_path)
+        
+        # Return URL with page anchor
         return {
             "url": f"/static/pdfs/{target_pdf}#page={page}",
             "page": page,
             "filename": target_pdf,
             "success": True,
-            "absolute_url": True
+            "absolute_url": True,
+            "full_path": static_pdf_path
         }
 
     except Exception as e:
+      
         raise HTTPException(status_code=500, detail=str(e))
+
 
 
 @app.post("/get_more_info")
